@@ -1,42 +1,400 @@
-#root {
-  max-width: 1280px;
+/* ── Utilities ──────────────────────────────────────────────── */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ── App shell ─────────────────────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.app-header {
+  background: var(--ink);
+  color: #fff;
+  padding: 2rem 1.25rem 2.5rem;
+}
+
+.app-header__inner {
+  max-width: 680px;
   margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
 }
 
 .logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.logo__mark {
+  font-size: 1.4rem;
+  color: var(--accent-light);
+  line-height: 1;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.logo__text {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+  color: #fff;
 }
 
-.card {
-  padding: 2em;
+.logo__text em {
+  font-style: italic;
+  color: var(--accent-light);
 }
 
-.read-the-docs {
-  color: #888;
+.app-header__tagline {
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.6);
+  font-weight: 300;
+  margin-left: 1.9rem;
+}
+
+/* ── Main content ───────────────────────────────────────────── */
+.app-main {
+  flex: 1;
+  max-width: 680px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1.25rem 3rem;
+}
+
+/* ── Search section ─────────────────────────────────────────── */
+.search-section {
+  margin-top: -1.25rem; /* overlap header slightly */
+  margin-bottom: 1.5rem;
+}
+
+.search-box {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.625rem;
+  border: 1.5px solid var(--surface-3);
+  transition: border-color var(--transition);
+}
+
+.search-input-wrap:focus-within {
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.search-input-wrap__icon {
+  color: var(--ink-3);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 1rem;
+  color: var(--ink);
+  font-weight: 400;
+  outline: none;
+  min-width: 0;
+}
+
+.search-input::placeholder { color: var(--ink-3); }
+
+/* Locate button */
+.locate-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-3);
+  transition: color var(--transition), background var(--transition), transform var(--transition);
+}
+
+.locate-btn:hover { background: var(--surface-3); color: var(--accent); }
+.locate-btn--active { color: var(--accent); }
+.locate-btn--spin svg { animation: spin 1s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Search button */
+.search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.7rem 1.25rem;
+  border-radius: var(--radius);
+  transition: background var(--transition), opacity var(--transition);
+  letter-spacing: 0.01em;
+}
+
+.search-btn:hover:not(:disabled) { background: #245c43; }
+.search-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Spinner inside button */
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Suggestion chips ────────────────────────────────────────── */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.suggestion-chip {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 100px;
+  border: 1px solid var(--surface-3);
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  line-height: 1.4;
+  text-align: left;
+}
+
+.suggestion-chip:hover {
+  background: var(--accent-pale);
+  color: var(--accent);
+  border-color: var(--accent-light);
+}
+
+/* ── Alert ───────────────────────────────────────────────────── */
+.alert {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.alert--error {
+  background: #fdecea;
+  color: var(--danger);
+  border: 1px solid #f5c6c2;
+}
+
+/* ── Query summary ───────────────────────────────────────────── */
+.query-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+
+.query-summary__source {
+  color: var(--ink-3);
+  font-weight: 500;
+  margin-right: 0.2rem;
+}
+
+.query-pill {
+  padding: 0.2rem 0.6rem;
+  border-radius: 100px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--surface-3);
+  font-weight: 500;
+}
+
+.query-pill--cat    { background: var(--accent-pale); color: var(--accent);  border-color: var(--accent-light); }
+.query-pill--urgency { background: var(--warn-pale);  color: var(--warn);    border-color: #f5c97b; }
+.query-pill--filter { background: #f0ecf9;            color: #5c3d99;        border-color: #c4b5e8; }
+
+/* ── Results ─────────────────────────────────────────────────── */
+.results-heading {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--ink-2);
+  margin-bottom: 0.75rem;
+  font-weight: 400;
+}
+
+.results-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ── Org card ─────────────────────────────────────────────────── */
+.org-card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--surface-3);
+  padding: 1rem 1.1rem 0.75rem;
+  transition: box-shadow var(--transition), transform var(--transition);
+}
+
+.org-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+
+.org-card__header { margin-bottom: 0.5rem; }
+
+.org-card__title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.org-card__name {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: var(--ink);
+  line-height: 1.3;
+  flex: 1;
+}
+
+.org-card__distance {
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  margin-top: 0.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.verified-chip {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.org-card__body { margin-bottom: 0.75rem; }
+
+.org-card__address {
+  font-size: 0.875rem;
+  color: var(--ink-2);
+  margin-bottom: 0.5rem;
+}
+
+/* ── Service tags ─────────────────────────────────────────────── */
+.org-card__services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.service-tag {
+  font-size: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--surface-3);
+  color: var(--ink-2);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* ── Open/closed badges ────────────────────────────────────────── */
+.badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 100px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge--open    { background: var(--accent-pale); color: var(--accent); }
+.badge--closed  { background: #fdecea; color: var(--danger); }
+.badge--unknown { background: var(--surface-2);  color: var(--ink-3); }
+
+/* ── Action buttons ─────────────────────────────────────────────── */
+.org-card__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--surface-3);
+  background: var(--surface);
+  color: var(--ink-2);
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.action-btn:hover               { background: var(--surface-2); }
+.action-btn--call:hover         { border-color: var(--accent-light); color: var(--accent); }
+.action-btn--dir:hover          { border-color: #74b9ff; color: #0984e3; }
+.action-btn--web:hover          { border-color: #a29bfe; color: #6c5ce7; }
+
+/* ── Verified date ───────────────────────────────────────────────── */
+.org-card__verified-date {
+  font-size: 0.72rem;
+  color: var(--ink-3);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--ink-2);
+}
+
+.empty-state__icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+.empty-state h3    { font-family: var(--font-display); font-size: 1.2rem; margin-bottom: 0.5rem; }
+.empty-state p     { font-size: 0.9rem; color: var(--ink-3); }
+
+/* ── Footer ──────────────────────────────────────────────────────── */
+.app-footer {
+  background: var(--surface-2);
+  border-top: 1px solid var(--surface-3);
+  padding: 1rem 1.25rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .app-header { padding: 1.5rem 1rem 2rem; }
+  .org-card   { padding: 0.875rem 0.875rem 0.625rem; }
+  .search-box { padding: 0.625rem; }
 }

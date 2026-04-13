@@ -299,10 +299,31 @@ async function parseQuery(req, res) {
     });
   }
 
-  res.json({
-    query: parsedQuery,
-    source,
-  });
+  res.json({query: parsedQuery, source,});
 }
 
-module.exports = { parseQuery };
+async function parseTextToQuery(text) {
+  let parsedQuery = await parseWithAI(text.trim());
+  let source = "keyword";
+
+  if (parsedQuery) {
+    const validation = validateQuerySchema(parsedQuery);
+    if (!validation.valid) parsedQuery = null;
+    else source = "ai";
+  }
+
+  if (!parsedQuery) {
+    parsedQuery = extractKeywords(text.trim());
+  }
+
+  const finalValidation = validateQuerySchema(parsedQuery);
+  if (!finalValidation.valid) {
+    const err = new Error("Failed to parse query");
+    err.details = finalValidation.errors;
+    throw err;
+  }
+
+  return { parsedQuery, source };
+}
+
+module.exports = { parseQuery, parseTextToQuery };

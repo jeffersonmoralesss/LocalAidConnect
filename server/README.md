@@ -120,6 +120,30 @@ Response:
   "source": "ai" | "keyword"
 }
 ```
+### Combined Search (AI + results)
+`POST /api/search`  
+Body:
+```json
+{ "text": "natural language request", "lat": 37.7749, "lng": -122.4194, "tzOffsetMinutes": -480 }
+
+{
+  "source": "ai" | "keyword",
+  "parsedQuery": {
+    "category": "food",
+    "urgency": "now",
+    "radiusMiles": 3,
+    "filters": {
+      "openNow": true,
+      "walkIn": false,
+      "costFree": true,
+      "noId": false
+    }
+  },
+  "results": {
+    "results": []
+  }
+}
+
 
 ## Example Requests
 

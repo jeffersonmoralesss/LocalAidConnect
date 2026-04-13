@@ -3,6 +3,8 @@ const express = require("express");
 const { openDb } = require("./db");
 const { getOrganizations } = require("./routes/organizations");
 const { parseQuery } = require("./routes/ai-parse");
+const { postSearch } = require("./routes/search");
+
 
 const PORT = Number(process.env.PORT || 3001);
 const DB_PATH =
@@ -52,6 +54,7 @@ function main() {
 
   const app = express();
   app.use(express.json());
+  app.post("/api/search", rateLimitMiddleware, postSearch);
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true });

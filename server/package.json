@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
@@ -14,4 +15,3 @@
     "openai": "^4.28.0"
   }
 }
-

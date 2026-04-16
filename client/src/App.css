@@ -233,6 +233,125 @@
 .query-pill--urgency { background: var(--warn-pale);  color: var(--warn);    border-color: #f5c97b; }
 .query-pill--filter { background: #f0ecf9;            color: #5c3d99;        border-color: #c4b5e8; }
 
+/* ── Location bar ───────────────────────────────────────────── */
+.location-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.location-bar__label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ink-3);
+  flex: 1;
+  min-width: 0;
+}
+
+.location-bar__coords {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.location-bar__coords--unset { color: var(--ink-3); font-style: italic; }
+
+.location-bar__actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.loc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--surface-3);
+  background: #fff;
+  color: var(--ink-2);
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+  white-space: nowrap;
+}
+
+.loc-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--ink-3);
+}
+
+.loc-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.loc-btn--demo {
+  background: var(--accent-pale);
+  border-color: var(--accent-light);
+  color: var(--accent);
+}
+
+.loc-btn--demo:hover:not(:disabled) {
+  background: #c0e8d0;
+  border-color: var(--accent);
+}
+
+.loc-btn--apply {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.loc-btn--apply:hover { background: #245c43; }
+
+/* Manual coords inline row */
+.manual-coords {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  width: 100%;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--surface-3);
+  margin-top: 0.1rem;
+}
+
+.manual-coords__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.manual-coords__input {
+  width: 110px;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--surface-3);
+  background: #fff;
+  font-size: 0.8rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color var(--transition);
+}
+
+.manual-coords__input:focus { border-color: var(--accent); }
+
+/* Small spinner variant for loc-btn */
+.spinner--sm {
+  width: 11px;
+  height: 11px;
+  border-width: 1.5px;
+}
+
 /* ── Results ─────────────────────────────────────────────────── */
 .results-heading {
   font-family: var(--font-display);

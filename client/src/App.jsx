@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 import "./App.css";
+import FiltersBar, { EMPTY_OVERRIDES, applyOverrides, hasOverrides } from "./components/FiltersBar";
+import OrgDetailModal from "./components/OrgDetailModal";
+import { SearchIcon, LocateIcon, PhoneIcon, DirectionsIcon, WebIcon } from "./components/Icons";
 
 // ── Constants ────────────────────────────────────────────────
 const DEMO_LOCATION = { lat: 37.7749, lng: -122.4194, label: "San Francisco, CA" };
@@ -26,7 +29,7 @@ function getBrowserLocation() {
   });
 }
 
-function tzOffsetMinutes() {
+function tzOffset() {
   return -new Date().getTimezoneOffset();
 }
 
@@ -41,7 +44,8 @@ function formatServiceType(type) {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Small components ─────────────────────────────────────────
+// ── Small display components ─────────────────────────────────
+
 function OpenBadge({ status }) {
   if (status === true)  return <span className="badge badge--open">Open now</span>;
   if (status === false) return <span className="badge badge--closed">Closed</span>;
@@ -52,7 +56,7 @@ function ServiceTag({ service }) {
   const parts = [formatServiceType(service.serviceType)];
   const cost = formatCost(service.costIndicator);
   if (cost && cost !== "Paid") parts.push(cost);
-  if (service.walkInIndicator) parts.push("Walk-in");
+  if (service.walkInIndicator)         parts.push("Walk-in");
   if (!service.idRequirementIndicator) parts.push("No ID");
   return (
     <span className="service-tag" title={service.eligibilityDescription || undefined}>
@@ -61,44 +65,62 @@ function ServiceTag({ service }) {
   );
 }
 
-function OrgCard({ org }) {
+// ── OrgCard ──────────────────────────────────────────────────
+
+function OrgCard({ org, onSelect }) {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(org.address)}`;
   return (
     <article className="org-card">
-      <header className="org-card__header">
-        <div className="org-card__title-row">
-          <h2 className="org-card__name">{org.name}</h2>
-          <OpenBadge status={org.openNowStatus} />
-        </div>
-        <p className="org-card__distance">
-          {org.distanceMiles != null ? `${org.distanceMiles} mi away` : ""}
-          {org.verification_status === "VERIFIED" && (
-            <span className="verified-chip" title="Verified organization">✓ Verified</span>
-          )}
-        </p>
-      </header>
-
-      <div className="org-card__body">
-        <p className="org-card__address">{org.address}</p>
-        {org.services && org.services.length > 0 && (
-          <div className="org-card__services">
-            {org.services.map((s) => <ServiceTag key={s.id} service={s} />)}
+      {/* Clickable region opens detail modal */}
+      <button
+        className="org-card__click-target"
+        onClick={() => onSelect(org)}
+        aria-label={`View details for ${org.name}`}
+      >
+        <header className="org-card__header">
+          <div className="org-card__title-row">
+            <h2 className="org-card__name">{org.name}</h2>
+            <OpenBadge status={org.openNowStatus} />
           </div>
-        )}
-      </div>
+          <p className="org-card__distance">
+            {org.distanceMiles != null ? `${org.distanceMiles} mi away` : ""}
+            {org.verification_status === "VERIFIED" && (
+              <span className="verified-chip" title="Verified organization">✓ Verified</span>
+            )}
+          </p>
+        </header>
+        <div className="org-card__body">
+          <p className="org-card__address">{org.address}</p>
+          {org.services && org.services.length > 0 && (
+            <div className="org-card__services">
+              {org.services.map((s) => <ServiceTag key={s.id} service={s} />)}
+            </div>
+          )}
+        </div>
+      </button>
 
+      {/* Quick-action row — outside the card button to avoid nested interactive elements */}
       <footer className="org-card__actions">
-        <a href={`tel:${org.phone}`} className="action-btn action-btn--call">
+        <a href={`tel:${org.phone}`} className="action-btn action-btn--call"
+          aria-label={`Call ${org.name}`}>
           <PhoneIcon /> Call
         </a>
-        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="action-btn action-btn--dir">
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+          className="action-btn action-btn--dir"
+          aria-label={`Directions to ${org.name}`}>
           <DirectionsIcon /> Directions
         </a>
         {org.website && (
-          <a href={org.website} target="_blank" rel="noopener noreferrer" className="action-btn action-btn--web">
+          <a href={org.website} target="_blank" rel="noopener noreferrer"
+            className="action-btn action-btn--web"
+            aria-label={`${org.name} website`}>
             <WebIcon /> Website
           </a>
         )}
+        <button className="action-btn action-btn--detail" onClick={() => onSelect(org)}
+          aria-label={`Full details for ${org.name}`}>
+          Details →
+        </button>
       </footer>
 
       <p className="org-card__verified-date">
@@ -108,27 +130,46 @@ function OrgCard({ org }) {
   );
 }
 
-function QuerySummary({ query, source }) {
-  if (!query) return null;
+// ── Query summary ─────────────────────────────────────────────
+
+function QuerySummary({ parsedQuery, source, overrides, finalParams }) {
+  if (!parsedQuery || !finalParams) return null;
   const urgencyLabel = { now: "Urgent", today: "Today", this_week: "This week" };
-  const filters = [];
-  if (query.filters?.openNow)  filters.push("Open now");
-  if (query.filters?.walkIn)   filters.push("Walk-in");
-  if (query.filters?.costFree) filters.push("Free/low-cost");
-  if (query.filters?.noId)     filters.push("No ID");
+  const aiFilters = parsedQuery.filters ?? {};
+  const overrideCount = Object.values(overrides).filter((v) => v !== null).length;
 
   return (
     <div className="query-summary" role="status" aria-live="polite">
       <span className="query-summary__source">{source === "ai" ? "AI" : "Keyword"} search</span>
-      <span className="query-pill query-pill--cat">{formatServiceType(query.category)}</span>
-      <span className="query-pill query-pill--urgency">{urgencyLabel[query.urgency] ?? query.urgency}</span>
-      <span className="query-pill">{query.radiusMiles} mi</span>
-      {filters.map((f) => <span key={f} className="query-pill query-pill--filter">{f}</span>)}
+      <span className="query-pill query-pill--cat">
+        {formatServiceType(finalParams.category || parsedQuery.category)}
+      </span>
+      <span className="query-pill query-pill--urgency">
+        {urgencyLabel[parsedQuery.urgency] ?? parsedQuery.urgency}
+      </span>
+      <span className={`query-pill${overrides.radiusMiles !== null ? " query-pill--override" : ""}`}>
+        {finalParams.radiusMiles} mi{overrides.radiusMiles !== null && " ↑"}
+      </span>
+      {finalParams.openNow && (
+        <span className={`query-pill query-pill--filter${overrides.openNow !== null ? " query-pill--override" : ""}`}>
+          Open now{overrides.openNow !== null && " ↑"}
+        </span>
+      )}
+      {aiFilters.walkIn   && <span className="query-pill query-pill--filter">Walk-in</span>}
+      {aiFilters.costFree && <span className="query-pill query-pill--filter">Free/low-cost</span>}
+      {aiFilters.noId     && <span className="query-pill query-pill--filter">No ID</span>}
+      {overrideCount > 0 && (
+        <span className="query-pill query-pill--override-note"
+          aria-label={`${overrideCount} filter override${overrideCount > 1 ? "s" : ""} applied`}>
+          {overrideCount} override{overrideCount > 1 ? "s" : ""} applied
+        </span>
+      )}
     </div>
   );
 }
 
 // ── Location bar ──────────────────────────────────────────────
+
 function LocationBar({ coords, locating, onUseBrowser, onUseDemo, onManualChange }) {
   const [showManual, setShowManual] = useState(false);
   const [latInput, setLatInput]     = useState("");
@@ -142,11 +183,11 @@ function LocationBar({ coords, locating, onUseBrowser, onUseDemo, onManualChange
     setShowManual(false);
   };
 
-  const coordLabel = coords
-    ? coords.isDemo
+  const coordLabel = !coords
+    ? "No location set"
+    : coords.isDemo
       ? `${DEMO_LOCATION.label} (demo)`
-      : `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
-    : "No location set";
+      : `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`;
 
   return (
     <div className="location-bar" aria-label="Location settings">
@@ -156,99 +197,39 @@ function LocationBar({ coords, locating, onUseBrowser, onUseDemo, onManualChange
           {coordLabel}
         </span>
       </span>
-
       <div className="location-bar__actions">
-        <button
-          className="loc-btn"
-          onClick={onUseBrowser}
-          disabled={locating}
-          aria-label="Use my browser location"
-        >
+        <button className="loc-btn" onClick={onUseBrowser} disabled={locating}
+          aria-label="Use my browser location">
           {locating
             ? <><span className="spinner spinner--sm" aria-hidden="true" /> Locating…</>
-            : <><LocateIcon /> My location</>
-          }
+            : <><LocateIcon /> My location</>}
         </button>
-
-        <button
-          className="loc-btn loc-btn--demo"
-          onClick={onUseDemo}
-          aria-label="Use San Francisco demo location"
+        <button className="loc-btn loc-btn--demo" onClick={onUseDemo}
           title="Sets location to SF to match seeded demo data"
-        >
+          aria-label="Use San Francisco demo location">
           SF demo
         </button>
-
-        <button
-          className="loc-btn"
-          onClick={() => setShowManual((v) => !v)}
-          aria-expanded={showManual}
-          aria-label="Enter coordinates manually"
-        >
+        <button className="loc-btn" onClick={() => setShowManual((v) => !v)}
+          aria-expanded={showManual} aria-label="Enter coordinates manually">
           Manual
         </button>
       </div>
-
       {showManual && (
         <div className="manual-coords" role="group" aria-label="Manual coordinate entry">
           <label className="manual-coords__label" htmlFor="lat-input">Lat</label>
-          <input
-            id="lat-input"
-            className="manual-coords__input"
-            type="number"
-            step="any"
-            placeholder="37.7749"
-            value={latInput}
-            onChange={(e) => setLatInput(e.target.value)}
-            aria-label="Latitude"
-          />
+          <input id="lat-input" className="manual-coords__input" type="number" step="any"
+            placeholder="37.7749" value={latInput}
+            onChange={(e) => setLatInput(e.target.value)} aria-label="Latitude" />
           <label className="manual-coords__label" htmlFor="lng-input">Lng</label>
-          <input
-            id="lng-input"
-            className="manual-coords__input"
-            type="number"
-            step="any"
-            placeholder="-122.4194"
-            value={lngInput}
-            onChange={(e) => setLngInput(e.target.value)}
-            aria-label="Longitude"
-          />
-          <button className="loc-btn loc-btn--apply" onClick={applyManual}>
-            Apply
-          </button>
+          <input id="lng-input" className="manual-coords__input" type="number" step="any"
+            placeholder="-122.4194" value={lngInput}
+            onChange={(e) => setLngInput(e.target.value)} aria-label="Longitude" />
+          <button className="loc-btn loc-btn--apply" onClick={applyManual}>Apply</button>
         </div>
       )}
     </div>
   );
 }
-
-// ── SVG icons ─────────────────────────────────────────────────
-const PhoneIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.6 19.79 19.79 0 0 1 1.61 5a2 2 0 0 1 1.99-2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 10.9a16 16 0 0 0 6 6l.82-.97a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 18.18z"/>
-  </svg>
-);
-const DirectionsIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-  </svg>
-);
-const WebIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-  </svg>
-);
-const SearchIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-  </svg>
-);
-const LocateIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-  </svg>
-);
 
 // ── Main App ─────────────────────────────────────────────────
 export default function App() {
@@ -256,12 +237,16 @@ export default function App() {
   const [results, setResults]         = useState(null);
   const [parsedQuery, setParsedQuery] = useState(null);
   const [source, setSource]           = useState(null);
+  const [finalParams, setFinalParams] = useState(null);
+  const [overrides, setOverrides]     = useState(EMPTY_OVERRIDES);
   const [loading, setLoading]         = useState(false);
   const [locating, setLocating]       = useState(false);
   const [error, setError]             = useState(null);
   const [coords, setCoords]           = useState(null);
+  const [selectedOrg, setSelectedOrg] = useState(null);
   const inputRef = useRef(null);
 
+  // ── Location ───────────────────────────────────────────────
   const handleUseBrowser = useCallback(async () => {
     setError(null);
     setLocating(true);
@@ -275,7 +260,7 @@ export default function App() {
     }
   }, []);
 
-  const handleUseDemo = useCallback(() => {
+  const handleUseDemo    = useCallback(() => {
     setCoords({ lat: DEMO_LOCATION.lat, lng: DEMO_LOCATION.lng, isDemo: true });
     setError(null);
   }, []);
@@ -285,48 +270,72 @@ export default function App() {
     setError(null);
   }, []);
 
-  const runSearch = useCallback(async (queryText, overrideCoords) => {
+  // ── Search (2-step: parse → organizations) ─────────────────
+  const runSearch = useCallback(async (queryText, activeOverrides) => {
     const q = (queryText ?? text).trim();
     if (!q) { inputRef.current?.focus(); return; }
 
-    // Fall back to SF demo automatically so first-time users always get results.
-    let c = overrideCoords ?? coords;
+    let c = coords;
     if (!c) {
       c = { lat: DEMO_LOCATION.lat, lng: DEMO_LOCATION.lng, isDemo: true };
       setCoords(c);
     }
 
+    const ov = activeOverrides ?? overrides;
     setError(null);
     setLoading(true);
 
     try {
-      const res = await fetch("/api/search", {
+      // Step 1 — parse natural language (REQ-3.1.1–3.1.6)
+      const parseRes = await fetch("/api/ai/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: q,
-          lat: c.lat,
-          lng: c.lng,
-          tzOffsetMinutes: tzOffsetMinutes(),
-        }),
+        body: JSON.stringify({ query: q }),
       });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Server error ${res.status}`);
+      if (!parseRes.ok) {
+        const body = await parseRes.json().catch(() => ({}));
+        throw new Error(body.error ?? `Parse error ${parseRes.status}`);
       }
+      const { query: pq, source: src } = await parseRes.json();
+      setParsedQuery(pq);
+      setSource(src);
 
-      const data = await res.json();
-      setParsedQuery(data.parsedQuery ?? null);
-      setSource(data.source ?? null);
-      setResults(data.results?.results ?? []);
+      // Step 2 — merge user overrides on top of AI result
+      const merged = applyOverrides(pq, ov);
+      setFinalParams(merged);
+
+      // Step 3 — fetch organizations (REQ-3.2.1–3.2.4)
+      const params = new URLSearchParams({
+        lat:             c.lat,
+        lng:             c.lng,
+        radiusMiles:     merged.radiusMiles,
+        tzOffsetMinutes: tzOffset(),
+      });
+      if (merged.category) params.set("category", merged.category);
+      if (merged.openNow)  params.set("openNow", "true");
+
+      const orgRes = await fetch(`/api/organizations?${params}`);
+      if (!orgRes.ok) {
+        const body = await orgRes.json().catch(() => ({}));
+        throw new Error(body.error ?? `Search error ${orgRes.status}`);
+      }
+      const data = await orgRes.json();
+      setResults(data.results ?? []);
     } catch (e) {
       setError(e.message);
       setResults(null);
     } finally {
       setLoading(false);
     }
-  }, [text, coords]);
+  }, [text, coords, overrides]);
+
+  // Re-run when overrides change if results are already shown
+  const handleOverrideChange = useCallback((newOverrides) => {
+    setOverrides(newOverrides);
+    if (results !== null && text.trim()) {
+      runSearch(text, newOverrides);
+    }
+  }, [results, text, runSearch]);
 
   return (
     <div className="app">
@@ -360,12 +369,8 @@ export default function App() {
                 aria-label="Describe what you need"
               />
             </div>
-            <button
-              className="search-btn"
-              onClick={() => runSearch()}
-              disabled={loading || locating}
-              aria-busy={loading}
-            >
+            <button className="search-btn" onClick={() => runSearch()}
+              disabled={loading || locating} aria-busy={loading}>
               {loading ? <span className="spinner" aria-hidden="true" /> : <SearchIcon />}
               {loading ? "Searching…" : "Find help"}
             </button>
@@ -374,7 +379,8 @@ export default function App() {
           {results === null && !loading && (
             <div className="suggestions" aria-label="Example searches">
               {PLACEHOLDER_QUERIES.map((s) => (
-                <button key={s} className="suggestion-chip" onClick={() => { setText(s); runSearch(s); }}>
+                <button key={s} className="suggestion-chip"
+                  onClick={() => { setText(s); runSearch(s, overrides); }}>
                   {s}
                 </button>
               ))}
@@ -383,11 +389,16 @@ export default function App() {
         </section>
 
         <LocationBar
-          coords={coords}
-          locating={locating}
+          coords={coords} locating={locating}
           onUseBrowser={handleUseBrowser}
           onUseDemo={handleUseDemo}
           onManualChange={handleManualChange}
+        />
+
+        <FiltersBar
+          overrides={overrides}
+          parsedQuery={parsedQuery}
+          onChange={handleOverrideChange}
         />
 
         {error && (
@@ -396,8 +407,11 @@ export default function App() {
           </div>
         )}
 
-        {parsedQuery && !loading && (
-          <QuerySummary query={parsedQuery} source={source} />
+        {parsedQuery && !loading && finalParams && (
+          <QuerySummary
+            parsedQuery={parsedQuery} source={source}
+            overrides={overrides} finalParams={finalParams}
+          />
         )}
 
         {results !== null && !loading && (
@@ -407,6 +421,9 @@ export default function App() {
                 <p className="empty-state__icon" aria-hidden="true">🔍</p>
                 <h3>No results found</h3>
                 <p>Try expanding your search radius or changing your search terms.</p>
+                {hasOverrides(overrides) && (
+                  <p className="empty-state__hint">You have active filter overrides — try clearing them.</p>
+                )}
               </div>
             ) : (
               <>
@@ -415,7 +432,9 @@ export default function App() {
                 </h2>
                 <ul className="results-list" aria-label={`${results.length} organizations found`}>
                   {results.map((org) => (
-                    <li key={org.id}><OrgCard org={org} /></li>
+                    <li key={org.id}>
+                      <OrgCard org={org} onSelect={setSelectedOrg} />
+                    </li>
                   ))}
                 </ul>
               </>
@@ -431,6 +450,13 @@ export default function App() {
           <strong>In an emergency, call 911.</strong>
         </p>
       </footer>
+
+      {selectedOrg && (
+        <OrgDetailModal
+          org={selectedOrg}
+          onClose={() => setSelectedOrg(null)}
+        />
+      )}
     </div>
   );
 }

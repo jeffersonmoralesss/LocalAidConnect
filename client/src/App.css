@@ -463,3 +463,103 @@ a { color: inherit; text-decoration: none; }
   .modal__header { padding: 1rem 1rem 0.75rem; }
   .modal__body   { padding: 0.875rem 1rem 2rem; }
 }
+/* ════════════════════════════════════════════════════════════
+   REPORT FORM (REQ-3.4) — append to App.css
+   ════════════════════════════════════════════════════════════ */
+
+.report-form {
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0.75rem 0.875rem;
+  display: flex; flex-direction: column; gap: 0.65rem;
+}
+
+/* Collapsed = just the trigger button, no outer chrome */
+.report-form--collapsed { padding: 0; border: none; background: none; }
+
+.report-form__trigger {
+  width: 100%; padding: 0.65rem 0.875rem;
+  font-size: 0.85rem; font-weight: 500; color: var(--ink-2);
+  background: var(--surface);
+  border: 1.5px dashed var(--surface-3);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.report-form__trigger:hover {
+  background: var(--warn-pale);
+  border-color: #f5c97b;
+  color: var(--warn);
+}
+.report-form__trigger:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+
+.report-form__header { margin-bottom: 0.25rem; }
+.report-form__title  { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
+
+.report-form__field { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.report-form__label {
+  font-size: 0.78rem; font-weight: 600; color: var(--ink-2);
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.report-form__label-hint {
+  font-size: 0.7rem; font-weight: 400; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-form__select,
+.report-form__textarea {
+  font-size: 0.88rem; padding: 0.5rem 0.625rem;
+  border-radius: var(--radius-sm); border: 1.5px solid var(--surface-3);
+  background: #fff; color: var(--ink); outline: none;
+  transition: border-color var(--transition);
+  font-family: inherit; width: 100%;
+}
+.report-form__select:focus,
+.report-form__textarea:focus { border-color: var(--accent); }
+
+.report-form__textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+.report-form__error {
+  padding: 0.5rem 0.75rem; border-radius: var(--radius-sm);
+  background: var(--danger-pale); color: var(--danger);
+  border: 1px solid #f5c6c2; font-size: 0.825rem;
+}
+
+.report-form__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.report-form__btn {
+  font-size: 0.825rem; font-weight: 500; padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm); border: 1.5px solid transparent;
+  transition: background var(--transition), border-color var(--transition);
+}
+.report-form__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.report-form__btn--primary {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.report-form__btn--primary:hover:not(:disabled) {
+  background: #245c43; border-color: #245c43;
+}
+
+.report-form__btn--secondary {
+  background: #fff; color: var(--ink-2); border-color: var(--surface-3);
+}
+.report-form__btn--secondary:hover:not(:disabled) {
+  background: var(--surface-2); border-color: var(--ink-3);
+}
+
+/* Success variant */
+.report-form--success {
+  background: var(--accent-pale);
+  border-color: var(--accent-light);
+}
+.report-form__success-heading {
+  font-size: 0.95rem; color: var(--accent); font-weight: 600; outline: none;
+}
+.report-form__success-msg {
+  font-size: 0.85rem; color: var(--ink-2); line-height: 1.45;
+}

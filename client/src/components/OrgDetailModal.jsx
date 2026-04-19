@@ -2,6 +2,7 @@
 // Organization detail view (REQ-3.3.1, REQ-3.3.2, REQ-3.3.3)
 // Renders as an accessible modal dialog.
 // Fetches GET /api/organizations/:id for the full hours schedule.
+// Includes inline Report Issue form (REQ-3.4).
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { PhoneIcon, DirectionsIcon, WebIcon, CloseIcon } from "./Icons";
@@ -10,6 +11,16 @@ import { PhoneIcon, DirectionsIcon, WebIcon, CloseIcon } from "./Icons";
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// ── Report form constants ────────────────────────────────────
+const REPORT_TYPES = [
+  { value: "INCORRECT_HOURS",    label: "Incorrect hours" },
+  { value: "MOVED_LOCATION",     label: "Moved location" },
+  { value: "CLOSED_PERMANENTLY", label: "Closed permanently" },
+  { value: "INCORRECT_SERVICES", label: "Incorrect services" },
+];
+const MAX_MESSAGE_LENGTH = 2000;
+
+// ── Utils ────────────────────────────────────────────────────
 function formatTime(timeStr) {
   if (!timeStr) return "";
   const match = timeStr.match(/^(\d{1,2}):(\d{2})/);
@@ -44,13 +55,11 @@ function HoursSchedule({ hours }) {
     return <p className="detail-empty-note">No hours information available.</p>;
   }
 
-  // Build a map: dayOfWeek → rows (could be multiple per day)
   const byDay = new Map();
   for (const h of hours) {
     if (!byDay.has(h.dayOfWeek)) byDay.set(h.dayOfWeek, []);
     byDay.get(h.dayOfWeek).push(h);
   }
-
   const today = new Date().getDay();
 
   return (
@@ -99,10 +108,10 @@ function ServicesList({ services }) {
       {services.map((s) => {
         const cost = formatCost(s.costIndicator);
         const tags = [];
-        if (cost)                   tags.push(cost);
-        if (s.walkInIndicator)      tags.push("Walk-in");
+        if (cost) tags.push(cost);
+        if (s.walkInIndicator) tags.push("Walk-in");
         if (!s.idRequirementIndicator) tags.push("No ID required");
-        else                           tags.push("ID required");
+        else                            tags.push("ID required");
 
         return (
           <li key={s.id} className="detail-service-item">
@@ -118,81 +127,278 @@ function ServicesList({ services }) {
   );
 }
 
-// ── Modal ─────────────────────────────────────────────────────
+// ── Inline Report Form ───────────────────────────────────────
+// REQ-3.4.1, REQ-3.4.2. Keeps focus inside the modal (form fields
+// are picked up by the existing focus trap).
+function ReportIssueSection({ organizationId }) {
+  const [open, setOpen]     = useState(false);
+  const [type, setType]     = useState(REPORT_TYPES[0].value);
+  const [message, setMsg]   = useState("");
+  const [state, setState]   = useState("idle"); // idle | submitting | success | error
+  const [error, setError]   = useState(null);
 
-/**
- * OrgDetailModal
- * Props:
- *   org: the org object from the results list (pre-fetched data)
- *   onClose: () => void
- */
+  const typeRef    = useRef(null);
+  const successRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  // When form opens, move focus to the type select
+  useEffect(() => {
+    if (open && state === "idle") typeRef.current?.focus();
+  }, [open, state]);
+
+  // When success state appears, announce it
+  useEffect(() => {
+    if (state === "success") successRef.current?.focus();
+  }, [state]);
+
+  const reset = () => {
+    setType(REPORT_TYPES[0].value);
+    setMsg("");
+    setState("idle");
+    setError(null);
+  };
+
+  const handleOpen = () => { reset(); setOpen(true); };
+
+  const handleCancel = () => {
+    setOpen(false);
+    reset();
+    triggerRef.current?.focus();
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+    reset();
+    triggerRef.current?.focus();
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+
+    const trimmed = message.trim();
+    if (!trimmed) {
+      setError("Please describe the issue.");
+      return;
+    }
+    if (trimmed.length > MAX_MESSAGE_LENGTH) {
+      setError(`Message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`);
+      return;
+    }
+
+    setState("submitting");
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationId,
+          reportType: type,
+          message: trimmed,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Submission failed (${res.status})`);
+      }
+      setState("success");
+    } catch (e) {
+      setState("error");
+      setError(e.message);
+    }
+  };
+
+  // ── Collapsed trigger ──
+  if (!open && state !== "success") {
+    return (
+      <div className="report-form report-form--collapsed">
+        <button
+          ref={triggerRef}
+          type="button"
+          className="report-form__trigger"
+          onClick={handleOpen}
+          aria-expanded="false"
+          aria-controls="report-form-panel"
+        >
+          ⚑ Report an issue with this listing
+        </button>
+      </div>
+    );
+  }
+
+  // ── Success ──
+  if (state === "success") {
+    return (
+      <div
+        className="report-form report-form--success"
+        id="report-form-panel"
+        role="status"
+        aria-live="polite"
+      >
+        <h4 ref={successRef} tabIndex={-1} className="report-form__success-heading">
+          ✓ Thanks — report submitted
+        </h4>
+        <p className="report-form__success-msg">
+          Our team will review the report. No further action is needed from you.
+        </p>
+        <div className="report-form__actions">
+          <button
+            type="button"
+            className="report-form__btn report-form__btn--secondary"
+            onClick={() => { reset(); setOpen(true); }}
+          >
+            Submit another report
+          </button>
+          <button
+            type="button"
+            className="report-form__btn report-form__btn--secondary"
+            onClick={handleClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Open form ──
+  const submitting = state === "submitting";
+
+  return (
+    <form
+      className="report-form"
+      id="report-form-panel"
+      onSubmit={handleSubmit}
+      aria-label="Report an issue with this listing"
+      noValidate
+    >
+      <div className="report-form__header">
+        <h4 className="report-form__title">Report an issue</h4>
+      </div>
+
+      <div className="report-form__field">
+        <label className="report-form__label" htmlFor="report-type-select">
+          What's the issue?
+        </label>
+        <select
+          id="report-type-select"
+          ref={typeRef}
+          className="report-form__select"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          disabled={submitting}
+        >
+          {REPORT_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="report-form__field">
+        <label className="report-form__label" htmlFor="report-message">
+          Details
+          <span className="report-form__label-hint">
+            {message.length}/{MAX_MESSAGE_LENGTH}
+          </span>
+        </label>
+        <textarea
+          id="report-message"
+          className="report-form__textarea"
+          rows={4}
+          maxLength={MAX_MESSAGE_LENGTH}
+          placeholder="Describe what's wrong (e.g. 'Phone number is disconnected', 'Building is vacant')…"
+          value={message}
+          onChange={(e) => setMsg(e.target.value)}
+          disabled={submitting}
+          required
+          aria-describedby={error ? "report-form-error" : undefined}
+          aria-invalid={error ? "true" : undefined}
+        />
+      </div>
+
+      {error && (
+        <div id="report-form-error" className="report-form__error" role="alert">
+          {error}
+        </div>
+      )}
+
+      <div className="report-form__actions">
+        <button
+          type="submit"
+          className="report-form__btn report-form__btn--primary"
+          disabled={submitting}
+          aria-busy={submitting}
+        >
+          {submitting ? "Submitting…" : "Submit report"}
+        </button>
+        <button
+          type="button"
+          className="report-form__btn report-form__btn--secondary"
+          onClick={handleCancel}
+          disabled={submitting}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ── Modal ─────────────────────────────────────────────────────
 export default function OrgDetailModal({ org, onClose }) {
-  const [detail, setDetail] = useState(null);   // full detail incl. hours
-  const [loading, setLoading] = useState(true);
+  const [detail, setDetail]         = useState(null);
+  const [loading, setLoading]       = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const dialogRef = useRef(null);
   const closeRef  = useRef(null);
 
-  // ── Fetch full detail ───────────────────────────────────────
+  // ── Fetch full detail ──
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setFetchError(null);
 
     fetch(`/api/organizations/${org.id}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`Server error ${r.status}`);
-        return r.json();
-      })
-      .then((data) => {
-        if (!cancelled) { setDetail(data); setLoading(false); }
-      })
-      .catch((e) => {
-        if (!cancelled) { setFetchError(e.message); setLoading(false); }
-      });
+      .then((r) => { if (!r.ok) throw new Error(`Server error ${r.status}`); return r.json(); })
+      .then((data) => { if (!cancelled) { setDetail(data); setLoading(false); } })
+      .catch((e) => { if (!cancelled) { setFetchError(e.message); setLoading(false); } });
 
     return () => { cancelled = true; };
   }, [org.id]);
 
-  // ── Accessibility: focus management ────────────────────────
+  // ── Focus management: close-button focused on open, restore on close ──
   useEffect(() => {
-    // Move focus to close button when modal opens
     closeRef.current?.focus();
-    // Restore focus to the element that opened the modal on unmount
     const trigger = document.activeElement;
     return () => { trigger?.focus(); };
   }, []);
 
-  // ── Accessibility: Escape key ────────────────────────────────
+  // ── Escape key + focus trap ──
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") onClose();
-
-      // Simple focus trap: Tab / Shift+Tab cycles within the dialog
       if (e.key !== "Tab") return;
       const el = dialogRef.current;
       if (!el) return;
       const focusable = Array.from(
         el.querySelectorAll(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
         )
       );
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last  = focusable[focusable.length - 1];
-
       if (e.shiftKey) {
         if (document.activeElement === first) { e.preventDefault(); last.focus(); }
       } else {
         if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
       }
     };
-
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  // ── Prevent body scroll while open ──────────────────────────
+  // ── Prevent body scroll while open ──
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -203,17 +409,11 @@ export default function OrgDetailModal({ org, onClose }) {
     if (e.target === e.currentTarget) onClose();
   }, [onClose]);
 
-  // Use fetched detail if available, else fall back to partial org from results
   const display = detail ?? org;
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(display.address)}`;
 
   return (
-    <div
-      className="modal-overlay"
-      role="presentation"
-      onClick={handleBackdropClick}
-      aria-hidden="false"
-    >
+    <div className="modal-overlay" role="presentation" onClick={handleBackdropClick} aria-hidden="false">
       <div
         ref={dialogRef}
         className="modal"
@@ -222,7 +422,6 @@ export default function OrgDetailModal({ org, onClose }) {
         aria-labelledby="modal-org-name"
         aria-describedby="modal-org-address"
       >
-        {/* ── Header ── */}
         <div className="modal__header">
           <div className="modal__title-block">
             <h2 id="modal-org-name" className="modal__name">{display.name}</h2>
@@ -238,10 +437,9 @@ export default function OrgDetailModal({ org, onClose }) {
           </button>
         </div>
 
-        {/* ── Scrollable body ── */}
         <div className="modal__body">
 
-          {/* Contact block */}
+          {/* ── Contact block ── */}
           <section className="modal__section modal__section--contact" aria-label="Contact information">
             <p id="modal-org-address" className="modal__address">{display.address}</p>
             {display.phone && (
@@ -254,24 +452,29 @@ export default function OrgDetailModal({ org, onClose }) {
             {display.website && (
               <p className="modal__website">
                 <a href={display.website} target="_blank" rel="noopener noreferrer"
-                  aria-label={`Visit website (opens in new tab)`}>
+                  aria-label="Visit website (opens in new tab)">
                   <WebIcon size={13} /> {display.website.replace(/^https?:\/\//, "")}
                 </a>
               </p>
             )}
           </section>
 
-          {/* One-click actions (REQ-3.3.3) */}
+          {/* ── One-click actions (REQ-3.3.3) ── */}
+          {/* Guard every action-btn so missing fields don't render broken links. */}
           <div className="modal__actions">
-            <a href={`tel:${display.phone}`} className="action-btn action-btn--call action-btn--lg"
-              aria-label={`Call ${display.name}`}>
-              <PhoneIcon /> Call
-            </a>
-            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-              className="action-btn action-btn--dir action-btn--lg"
-              aria-label={`Get directions to ${display.name} (opens in new tab)`}>
-              <DirectionsIcon /> Directions
-            </a>
+            {display.phone && (
+              <a href={`tel:${display.phone}`} className="action-btn action-btn--call action-btn--lg"
+                aria-label={`Call ${display.name}`}>
+                <PhoneIcon /> Call
+              </a>
+            )}
+            {display.address && (
+              <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                className="action-btn action-btn--dir action-btn--lg"
+                aria-label={`Get directions to ${display.name} (opens in new tab)`}>
+                <DirectionsIcon /> Directions
+              </a>
+            )}
             {display.website && (
               <a href={display.website} target="_blank" rel="noopener noreferrer"
                 className="action-btn action-btn--web action-btn--lg"
@@ -281,13 +484,13 @@ export default function OrgDetailModal({ org, onClose }) {
             )}
           </div>
 
-          {/* Services (REQ-3.3.2) */}
+          {/* ── Services ── */}
           <section className="modal__section" aria-label="Services offered">
             <h3 className="modal__section-title">Services</h3>
             <ServicesList services={display.services} />
           </section>
 
-          {/* Hours (REQ-3.3.2) */}
+          {/* ── Hours ── */}
           <section className="modal__section" aria-label="Operating hours">
             <h3 className="modal__section-title">Hours</h3>
             {loading && (
@@ -299,12 +502,10 @@ export default function OrgDetailModal({ org, onClose }) {
             {fetchError && (
               <p className="detail-empty-note">Could not load hours: {fetchError}</p>
             )}
-            {!loading && !fetchError && detail && (
-              <HoursSchedule hours={detail.hours} />
-            )}
+            {!loading && !fetchError && detail && <HoursSchedule hours={detail.hours} />}
           </section>
 
-          {/* Verification (REQ-3.3.2) */}
+          {/* ── Verification ── */}
           <section className="modal__section modal__section--meta" aria-label="Verification information">
             <dl className="detail-meta">
               <div className="detail-meta__row">
@@ -328,8 +529,14 @@ export default function OrgDetailModal({ org, onClose }) {
             </dl>
           </section>
 
-        </div>{/* /modal__body */}
-      </div>{/* /modal */}
+          {/* ── Report issue (REQ-3.4) ── */}
+          <section className="modal__section" aria-label="Report an issue with this listing">
+            <h3 className="modal__section-title">Something wrong?</h3>
+            <ReportIssueSection organizationId={display.id} />
+          </section>
+
+        </div>
+      </div>
     </div>
   );
 }

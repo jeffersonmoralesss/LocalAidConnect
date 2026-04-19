@@ -23,8 +23,6 @@ After installation completes, try `npm install` again. If issues persist:
 2. Try rebuilding: `npm rebuild better-sqlite3`
 3. Check the [better-sqlite3 documentation](https://github.com/WiseLibs/better-sqlite3/blob/master/docs/troubleshooting.md) for additional troubleshooting
 
-The server will display a friendly error message if `better-sqlite3` fails to load, pointing to this section.
-
 ## Run
 
 ```bash
@@ -37,158 +35,100 @@ npm run dev
 npm run seed
 ```
 
-### What `seed` does
-
-- **Wipes** all existing rows from `reports`, `services`, `hours`, and `organizations` (and resets their `sqlite_sequence` counters).
-- **Re-inserts** ~18 fictitious organizations spread across all service categories: `food`, `shelter`, `medical`, `vaccines`, `mental_health`, `legal`, `other`.
-- Each organization gets:
-  - At least one `services` row.
-  - All 7 `hours` rows (day_of_week 0–6). Some orgs use `00:00–23:59` (always open) to guarantee `openNowStatus: true` during demos; others use realistic weekday/evening windows.
-- Prints a summary: number of orgs, services, and hours rows inserted.
-
-### ⚠️ Data warning
-
-Running `npm run seed` **overwrites all demo data**. Any manually inserted rows (including the original "Test Food Pantry") will be deleted. This is intentional — seed is the single source of truth for the demo database.
-
-### Demo search location
-
-All seeded organizations are clustered around **San Francisco (lat=37.7749, lng=-122.4194)**. Use this as your search origin in the UI or via curl.
-
-```bash
-# Quick sanity check after seeding
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&radiusMiles=10&openNow=true"
-
-# Full natural-language search
-curl -s -X POST http://localhost:3001/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"text":"free food open now","lat":37.7749,"lng":-122.4194,"tzOffsetMinutes":-420}' \
-  | python3 -m json.tool
-```
+Wipes the database and re-inserts ~18 fictitious organizations clustered around **San Francisco (lat=37.7749, lng=-122.4194)**, each with services and 7-day hours rows.
 
 ## Environment variables
 
 - **PORT**: HTTP port (default `3001`)
 - **DB_PATH**: path to SQLite DB file (default `server/db/localaid.sqlite`)
-- **OPENAI_API_KEY**: OpenAI API key for AI parsing (optional, falls back to keyword extraction if not set)
+- **OPENAI_API_KEY**: OpenAI API key for AI parsing (optional, falls back to keyword extraction)
 - **OPENAI_MODEL**: OpenAI model to use (default `gpt-4o-mini`)
-
-## Schema initialization
-
-On startup, the server opens the SQLite database and ensures the Section 4 tables exist (**REQ-4.1 → REQ-4.4**).  
-If any required tables are missing, it loads and executes `server/db/schema.sql`.
 
 ## API Endpoints
 
 ### Health
 `GET /api/health` → `{ "ok": true }`
 
-### Organizations Search
-`GET /api/organizations?lat=<lat>&lng=<lng>&radiusMiles=<miles>&category=<category>&openNow=true&tzOffsetMinutes=<offset>`
+### Organizations list
+`GET /api/organizations?lat=<lat>&lng=<lng>&radiusMiles=<miles>&category=<category>&openNow=true&tzOffsetMinutes=<offset>`  
+Implements **REQ-3.2.1–REQ-3.2.4**.
 
-Returns organizations within radius, sorted by distance. Implements **REQ-3.2.1–REQ-3.2.4**.
-
-**Query parameters:**
-- `lat` (required): Latitude (-90 to 90)
-- `lng` (required): Longitude (-180 to 180)
-- `radiusMiles` (optional): Search radius in miles (default: 3, per SRS Section 3.1)
-- `category` (optional): Filter by service category (`food`, `shelter`, `medical`, `vaccines`, `mental_health`, `legal`, `other`)
-- `openNow` (optional): Filter to organizations currently open (`true` to enable)
-- `tzOffsetMinutes` (optional): Timezone offset in minutes for open-now evaluation (e.g., `-300` for EST, `-480` for PST). If not provided, uses server time.
-
-**Response:**
-```json
-{
-  "results": [
-    {
-      "id": 1,
-      "name": "Mission Street Food Bank",
-      "address": "1800 Mission St, San Francisco, CA 94103",
-      "latitude": 37.7645,
-      "longitude": -122.419,
-      "phone": "415-555-0101",
-      "website": "https://example.org/msfb",
-      "verification_status": "VERIFIED",
-      "last_verified_at": "2025-03-01",
-      "distanceMiles": 0.6,
-      "openNowStatus": true,
-      "services": [
-        {
-          "id": 1,
-          "serviceType": "food",
-          "eligibilityDescription": "Open to all SF residents. No income limit.",
-          "costIndicator": "FREE",
-          "walkInIndicator": true,
-          "idRequirementIndicator": false
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Notes:**
-- `openNowStatus`: `true` if open, `false` if closed, `null` if unknown (no hours data for today)
-- Results are sorted by distance (nearest first)
-- Services array is included for each organization
+### Organization detail
+`GET /api/organizations/:id`  
+Returns org + services + 7-day hours. Implements **REQ-3.3.1, REQ-3.3.2**.
 
 ### AI Parse
-`POST /api/ai/parse`  
-Body: `{ "query": "natural language search query" }`
+`POST /api/ai/parse` — body `{ "query": "natural language search query" }`  
+Rate limited to 10 requests/minute per IP. Implements **REQ-3.1.1–REQ-3.1.6**.
 
-Parses natural language into structured JSON query. Falls back to keyword extraction if AI parsing fails. Rate limited to 10 requests/minute per IP. Implements **REQ-3.1.1–REQ-3.1.6**.
+### Report an issue
+`POST /api/reports` — **REQ-3.4.1, REQ-3.4.2**. Rate limited.
 
-Response:
+Body:
 ```json
 {
-  "query": {
-    "category": "food",
-    "urgency": "now",
-    "radiusMiles": 3,
-    "filters": {
-      "openNow": true,
-      "walkIn": false,
-      "costFree": true,
-      "noId": false
-    }
-  },
-  "source": "ai | keyword"
+  "organizationId": 1,
+  "reportType": "INCORRECT_HOURS",
+  "message": "Listed open Saturday but was closed when I visited."
 }
 ```
 
-### Search (combined AI parse + org query)
-`POST /api/search`  
-Body: `{ "text": "...", "lat": 37.77, "lng": -122.41, "tzOffsetMinutes": -420 }`
+Valid `reportType`: `INCORRECT_HOURS`, `MOVED_LOCATION`, `CLOSED_PERMANENTLY`, `INCORRECT_SERVICES`.
 
-Combines AI/keyword parsing with the organizations search in one call.
+### Admin: list reports
+`GET /api/admin/reports?status=NEW|UNDER_REVIEW|APPLIED|REJECTED` — **REQ-3.5.1**. `status` optional.
 
-## Example Requests
+### Admin: update status
+`PATCH /api/admin/reports/:id` — body `{ "status": "UNDER_REVIEW" | "APPLIED" | "REJECTED" }`. **REQ-3.5.3**.
 
-### Default radius (3 miles)
+> Admin routes are unauthenticated in MVP. See `TODO` comment in `src/index.js`.
 
-```bash
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194"
-```
+## Sanity checks
 
-### Category filter
+Run these after starting the server (`npm run dev`) to verify every route is live. Use `-i` so headers (and the status code) always print, even on success.
 
 ```bash
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&category=food"
+# Health — should return 200 + {"ok":true}
+curl -i http://localhost:3001/api/health
+
+# Organizations search — 200 + { "results": [...] }
+curl -i "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&radiusMiles=5"
+
+# Organization detail — 200 + full org with services + hours
+curl -i http://localhost:3001/api/organizations/1
+
+# Submit a report — should return 201 with the created row
+curl -i -X POST http://localhost:3001/api/reports \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationId": 1,
+    "reportType": "INCORRECT_HOURS",
+    "message": "Phone number is disconnected."
+  }'
+
+# Admin: list NEW reports
+curl -i "http://localhost:3001/api/admin/reports?status=NEW"
+
+# Admin: mark report 1 as applied
+curl -i -X PATCH http://localhost:3001/api/admin/reports/1 \
+  -H "Content-Type: application/json" \
+  -d '{"status":"APPLIED"}'
 ```
 
-### Open now filter
+### Troubleshooting: `POST /api/reports` returns 404
 
-```bash
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&openNow=true"
-```
+A 404 from the server (not from the Vite proxy) means Express has no route matching that path. Check in this order:
 
-### Timezone-aware open now
-
-```bash
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&openNow=true&tzOffsetMinutes=-300"
-```
-
-### Custom radius
-
-```bash
-curl "http://localhost:3001/api/organizations?lat=37.7749&lng=-122.4194&radiusMiles=10"
-```
+1. **Is the handler file present?** `ls server/src/routes/reports.js` — if missing, the server still starts because `index.js` would fail to import and crash; check terminal output for a `MODULE_NOT_FOUND` error.
+2. **Are the routes registered in `index.js`?**
+   ```bash
+   grep -n "reports" server/src/index.js
+   ```
+   You should see lines requiring the handlers and registering all three routes (`POST /api/reports`, `GET /api/admin/reports`, `PATCH /api/admin/reports/:id`).
+3. **Did the dev server restart?** `node --watch` usually reloads on file changes, but if the terminal shows an error, fix it and restart manually:
+   ```bash
+   # Ctrl-C to stop, then
+   npm run dev
+   ```
+4. **Is the frontend hitting the right URL?** Open the browser devtools → Network tab → click Submit on the report form. The request should go to `http://localhost:5173/api/reports` and be proxied to `http://localhost:3001/api/reports`. If the request URL is `/reports` (no `/api` prefix), the fetch call in `OrgDetailModal.jsx` is wrong.
+5. **Bypass the Vite proxy** — hit the backend directly with the curl above. If curl works but the UI doesn't, the bug is on the frontend side.

@@ -1,8 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import "./App.css";
 import FiltersBar, { EMPTY_OVERRIDES, applyOverrides, hasOverrides } from "./components/FiltersBar";
 import OrgDetailModal from "./components/OrgDetailModal";
+import AdminPage from "./components/AdminPage";
 import { SearchIcon, LocateIcon, PhoneIcon, DirectionsIcon, WebIcon } from "./components/Icons";
+import { VerificationBadge, SourceBadge, VerifiedOnLine } from "./components/TrustBadges";
 
 // ── Constants ────────────────────────────────────────────────
 const DEMO_LOCATION = { lat: 37.7749, lng: -122.4194, label: "San Francisco, CA" };
@@ -14,6 +16,20 @@ const PLACEHOLDER_QUERIES = [
   "mental health counseling this week",
   "legal aid, low cost",
 ];
+
+// ── Hash-based "routing" ─────────────────────────────────────
+// Minimal: only distinguishes "#admin" from everything else.
+function useHashRoute() {
+  const [hash, setHash] = useState(() => window.location.hash);
+
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  return hash;
+}
 
 // ── Helpers ──────────────────────────────────────────────────
 function getBrowserLocation() {
@@ -29,9 +45,7 @@ function getBrowserLocation() {
   });
 }
 
-function tzOffset() {
-  return -new Date().getTimezoneOffset();
-}
+function tzOffset() { return -new Date().getTimezoneOffset(); }
 
 function formatCost(indicator) {
   if (!indicator) return null;
@@ -44,7 +58,7 @@ function formatServiceType(type) {
   return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Small display components ─────────────────────────────────
+// ── Display components ───────────────────────────────────────
 
 function OpenBadge({ status }) {
   if (status === true)  return <span className="badge badge--open">Open now</span>;
@@ -56,7 +70,7 @@ function ServiceTag({ service }) {
   const parts = [formatServiceType(service.serviceType)];
   const cost = formatCost(service.costIndicator);
   if (cost && cost !== "Paid") parts.push(cost);
-  if (service.walkInIndicator)         parts.push("Walk-in");
+  if (service.walkInIndicator) parts.push("Walk-in");
   if (!service.idRequirementIndicator) parts.push("No ID");
   return (
     <span className="service-tag" title={service.eligibilityDescription || undefined}>
@@ -65,13 +79,14 @@ function ServiceTag({ service }) {
   );
 }
 
-// ── OrgCard ──────────────────────────────────────────────────
-
 function OrgCard({ org, onSelect }) {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(org.address)}`;
+  // OSM imports may have empty phone; guard against tel:(empty) links.
+  const hasPhone = !!org.phone;
+  const isOsmImport = org.data_source === "OSM";
+
   return (
-    <article className="org-card">
-      {/* Clickable region opens detail modal */}
+    <article className={`org-card${isOsmImport ? " org-card--osm" : ""}`}>
       <button
         className="org-card__click-target"
         onClick={() => onSelect(org)}
@@ -82,12 +97,16 @@ function OrgCard({ org, onSelect }) {
             <h2 className="org-card__name">{org.name}</h2>
             <OpenBadge status={org.openNowStatus} />
           </div>
-          <p className="org-card__distance">
-            {org.distanceMiles != null ? `${org.distanceMiles} mi away` : ""}
-            {org.verification_status === "VERIFIED" && (
-              <span className="verified-chip" title="Verified organization">✓ Verified</span>
+          <div className="org-card__meta-row">
+            {org.distanceMiles != null && (
+              <span className="org-card__distance-text">{org.distanceMiles} mi away</span>
             )}
-          </p>
+            <VerificationBadge
+              status={org.verification_status}
+              lastVerifiedAt={org.last_verified_at}
+            />
+            <SourceBadge source={org.data_source} />
+          </div>
         </header>
         <div className="org-card__body">
           <p className="org-card__address">{org.address}</p>
@@ -99,21 +118,20 @@ function OrgCard({ org, onSelect }) {
         </div>
       </button>
 
-      {/* Quick-action row — outside the card button to avoid nested interactive elements */}
       <footer className="org-card__actions">
-        <a href={`tel:${org.phone}`} className="action-btn action-btn--call"
-          aria-label={`Call ${org.name}`}>
-          <PhoneIcon /> Call
-        </a>
+        {hasPhone && (
+          <a href={`tel:${org.phone}`} className="action-btn action-btn--call"
+            aria-label={`Call ${org.name}`}>
+            <PhoneIcon /> Call
+          </a>
+        )}
         <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-          className="action-btn action-btn--dir"
-          aria-label={`Directions to ${org.name}`}>
+          className="action-btn action-btn--dir" aria-label={`Directions to ${org.name}`}>
           <DirectionsIcon /> Directions
         </a>
         {org.website && (
           <a href={org.website} target="_blank" rel="noopener noreferrer"
-            className="action-btn action-btn--web"
-            aria-label={`${org.name} website`}>
+            className="action-btn action-btn--web" aria-label={`${org.name} website`}>
             <WebIcon /> Website
           </a>
         )}
@@ -124,13 +142,11 @@ function OrgCard({ org, onSelect }) {
       </footer>
 
       <p className="org-card__verified-date">
-        Last verified: {org.last_verified_at ? org.last_verified_at.slice(0, 10) : "unknown"}
+        <VerifiedOnLine lastVerifiedAt={org.last_verified_at} />
       </p>
     </article>
   );
 }
-
-// ── Query summary ─────────────────────────────────────────────
 
 function QuerySummary({ parsedQuery, source, overrides, finalParams }) {
   if (!parsedQuery || !finalParams) return null;
@@ -167,8 +183,6 @@ function QuerySummary({ parsedQuery, source, overrides, finalParams }) {
     </div>
   );
 }
-
-// ── Location bar ──────────────────────────────────────────────
 
 function LocationBar({ coords, locating, onUseBrowser, onUseDemo, onManualChange }) {
   const [showManual, setShowManual] = useState(false);
@@ -231,8 +245,8 @@ function LocationBar({ coords, locating, onUseBrowser, onUseDemo, onManualChange
   );
 }
 
-// ── Main App ─────────────────────────────────────────────────
-export default function App() {
+// ── Main search view ─────────────────────────────────────────
+function SearchView() {
   const [text, setText]               = useState("");
   const [results, setResults]         = useState(null);
   const [parsedQuery, setParsedQuery] = useState(null);
@@ -246,7 +260,6 @@ export default function App() {
   const [selectedOrg, setSelectedOrg] = useState(null);
   const inputRef = useRef(null);
 
-  // ── Location ───────────────────────────────────────────────
   const handleUseBrowser = useCallback(async () => {
     setError(null);
     setLocating(true);
@@ -260,7 +273,7 @@ export default function App() {
     }
   }, []);
 
-  const handleUseDemo    = useCallback(() => {
+  const handleUseDemo = useCallback(() => {
     setCoords({ lat: DEMO_LOCATION.lat, lng: DEMO_LOCATION.lng, isDemo: true });
     setError(null);
   }, []);
@@ -270,7 +283,6 @@ export default function App() {
     setError(null);
   }, []);
 
-  // ── Search (2-step: parse → organizations) ─────────────────
   const runSearch = useCallback(async (queryText, activeOverrides) => {
     const q = (queryText ?? text).trim();
     if (!q) { inputRef.current?.focus(); return; }
@@ -280,13 +292,11 @@ export default function App() {
       c = { lat: DEMO_LOCATION.lat, lng: DEMO_LOCATION.lng, isDemo: true };
       setCoords(c);
     }
-
     const ov = activeOverrides ?? overrides;
     setError(null);
     setLoading(true);
 
     try {
-      // Step 1 — parse natural language (REQ-3.1.1–3.1.6)
       const parseRes = await fetch("/api/ai/parse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -300,11 +310,9 @@ export default function App() {
       setParsedQuery(pq);
       setSource(src);
 
-      // Step 2 — merge user overrides on top of AI result
       const merged = applyOverrides(pq, ov);
       setFinalParams(merged);
 
-      // Step 3 — fetch organizations (REQ-3.2.1–3.2.4)
       const params = new URLSearchParams({
         lat:             c.lat,
         lng:             c.lng,
@@ -329,7 +337,6 @@ export default function App() {
     }
   }, [text, coords, overrides]);
 
-  // Re-run when overrides change if results are already shown
   const handleOverrideChange = useCallback((newOverrides) => {
     setOverrides(newOverrides);
     if (results !== null && text.trim()) {
@@ -338,7 +345,7 @@ export default function App() {
   }, [results, text, runSearch]);
 
   return (
-    <div className="app">
+    <>
       <header className="app-header">
         <div className="app-header__inner">
           <div className="logo">
@@ -449,6 +456,9 @@ export default function App() {
           Always call ahead to confirm services.{" "}
           <strong>In an emergency, call 911.</strong>
         </p>
+        <p className="app-footer__admin-link">
+          <a href="#admin">Admin</a>
+        </p>
       </footer>
 
       {selectedOrg && (
@@ -457,6 +467,23 @@ export default function App() {
           onClose={() => setSelectedOrg(null)}
         />
       )}
+    </>
+  );
+}
+
+// ── Root ─────────────────────────────────────────────────────
+export default function App() {
+  const hash = useHashRoute();
+  const isAdmin = hash === "#admin";
+
+  const exitAdmin = () => {
+    // Clear hash, return to search view
+    window.location.hash = "";
+  };
+
+  return (
+    <div className="app">
+      {isAdmin ? <AdminPage onExit={exitAdmin} /> : <SearchView />}
     </div>
   );
 }

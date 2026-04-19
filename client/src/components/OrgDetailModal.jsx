@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { PhoneIcon, DirectionsIcon, WebIcon, CloseIcon } from "./Icons";
+import { VerificationBadge, SourceBadge } from "./TrustBadges";
 
 // ── Day helpers ───────────────────────────────────────────────
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -505,21 +506,36 @@ export default function OrgDetailModal({ org, onClose }) {
             {!loading && !fetchError && detail && <HoursSchedule hours={detail.hours} />}
           </section>
 
-          {/* ── Verification ── */}
+          {/* ── Verification (REQ-3.3.2 + trust labels) ── */}
           <section className="modal__section modal__section--meta" aria-label="Verification information">
+            <div className="detail-trust-row">
+              <VerificationBadge
+                status={display.verification_status}
+                lastVerifiedAt={display.last_verified_at}
+                size="md"
+              />
+              <SourceBadge source={display.data_source} size="md" />
+            </div>
             <dl className="detail-meta">
               <div className="detail-meta__row">
-                <dt>Status</dt>
+                <dt>Last verified</dt>
                 <dd>
-                  <span className={`verify-badge verify-badge--${(display.verification_status ?? "").toLowerCase()}`}>
-                    {display.verification_status ?? "Unknown"}
-                  </span>
+                  {display.last_verified_at
+                    ? display.last_verified_at.slice(0, 10)
+                    : <span className="detail-meta__never">Not verified yet</span>}
                 </dd>
               </div>
-              <div className="detail-meta__row">
-                <dt>Last verified</dt>
-                <dd>{display.last_verified_at ? display.last_verified_at.slice(0, 10) : "Unknown"}</dd>
-              </div>
+              {display.source_url && (
+                <div className="detail-meta__row">
+                  <dt>Source</dt>
+                  <dd>
+                    <a href={display.source_url} target="_blank" rel="noopener noreferrer"
+                      className="detail-meta__source-link">
+                      View on {display.data_source === "OSM" ? "OpenStreetMap" : "source"} ↗
+                    </a>
+                  </dd>
+                </div>
+              )}
               {org.distanceMiles != null && (
                 <div className="detail-meta__row">
                   <dt>Distance</dt>

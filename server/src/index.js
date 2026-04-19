@@ -1,8 +1,12 @@
 const path = require("node:path");
 const express = require("express");
 const { openDb } = require("./db");
-const { getOrganizations, getOrganizationById } = require("./routes/organizations");
+const {
+  getOrganizations, getOrganizationById,
+  listOrganizations, verifyOrganization, unverifyOrganization,
+} = require("./routes/organizations");
 const { parseQuery } = require("./routes/ai-parse");
+const { postSearch } = require("./routes/search");
 const { createReport, listReports, updateReportStatus } = require("./routes/reports");
 
 const PORT = Number(process.env.PORT || 3001);
@@ -11,7 +15,6 @@ const DB_PATH =
   path.join(__dirname, "..", "db", "localaid.sqlite");
 
 // Simple in-memory rate limiter (REQ-5.4)
-// Applied to AI parse and report creation endpoints.
 const rateLimitStore = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 10;
@@ -50,22 +53,29 @@ function main() {
     res.json({ ok: true });
   });
 
-  // REQ-3.2.1–3.2.4: organization list search
-  app.get("/api/organizations", getOrganizations);
-
-  // REQ-3.3.1–3.3.2: organization detail (services + hours)
+  // ── Organization search + detail (REQ-3.2, REQ-3.3) ──────────────
+  app.get("/api/organizations",     getOrganizations);
   app.get("/api/organizations/:id", getOrganizationById);
 
-  // REQ-3.1.1–3.1.6: AI parse (rate-limited per REQ-5.4)
+  // ── AI parse (REQ-3.1) — rate limited ────────────────────────────
   app.post("/api/ai/parse", rateLimitMiddleware, parseQuery);
 
-  // REQ-3.4.1, REQ-3.4.2: user report submission (rate-limited per REQ-5.4)
+  // ── Unified search — parse + search + on-demand OSM import ───────
+  // Rate-limited because it can trigger outbound Overpass calls.
+  app.post("/api/search", rateLimitMiddleware, postSearch);
+
+  // ── Reports (REQ-3.4) ────────────────────────────────────────────
   app.post("/api/reports", rateLimitMiddleware, createReport);
 
-  // REQ-3.5.1, REQ-3.5.3: admin moderation
-  // TODO: protect admin routes with token-based auth before production.
-  app.get("/api/admin/reports", listReports);
-  app.patch("/api/admin/reports/:id", updateReportStatus);
+  // ── Admin moderation (REQ-3.5) ───────────────────────────────────
+  // TODO: protect admin routes with token-based auth (ADMIN_TOKEN) before production.
+  app.get("/api/admin/reports",              listReports);
+  app.patch("/api/admin/reports/:id",        updateReportStatus);
+
+  // ── Admin verification workflow (extension of REQ-3.5.2) ─────────
+  app.get("/api/admin/organizations",                  listOrganizations);
+  app.patch("/api/admin/organizations/:id/verify",     verifyOrganization);
+  app.patch("/api/admin/organizations/:id/unverify",   unverifyOrganization);
 
   app.locals.db = db;
 

@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { runMigrations } = require("./migrations");
 
 // Load better-sqlite3 with friendly error handling for Mac build issues
 let Database;
@@ -20,7 +21,7 @@ try {
     );
     process.exit(1);
   }
-  throw error; // Re-throw if it's a different error
+  throw error;
 }
 
 function fileExists(p) {
@@ -33,7 +34,6 @@ function fileExists(p) {
 }
 
 function getSchemaPath() {
-  // schema.sql implements SRS Section 4: REQ-4.1 → REQ-4.4
   return path.join(__dirname, "..", "db", "schema.sql");
 }
 
@@ -62,13 +62,17 @@ function ensureSchema(db) {
 
 function openDb({ dbPath }) {
   const db = new Database(dbPath);
-
-  // Enforce FK relationships (needed for REQ-4.2.1 / REQ-4.3.1 / REQ-4.4.1 associations).
   db.pragma("foreign_keys = ON");
 
+  // Step 1: create any missing tables (fresh DB gets the full Option-2 schema
+  // because schema.sql is already updated).
   ensureSchema(db);
+
+  // Step 2: migrate any pre-existing DB to the Option-2 shape.
+  // Idempotent — no-op if already migrated.
+  runMigrations(db);
+
   return db;
 }
 
 module.exports = { openDb };
-

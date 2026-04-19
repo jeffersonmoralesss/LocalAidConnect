@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "smoke": "node scripts/smoke-test.js",
+    "demo": "npm run seed && npm run smoke"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",
